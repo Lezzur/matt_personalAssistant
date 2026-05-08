@@ -72,7 +72,7 @@ A **standalone, managed, multi-tenant-architected assistant** that reads Matt's 
 
 ## 5. Technical Feasibility
 
-- **Platform/architecture direction:** Single Node/TypeScript service, multi-tenant data model (`users/{uid}/...` document tree, all queries scoped to uid), single-tenant deployment for v1 (one Coolify host, low-N installs per instance per Rick — max ~2–3 active tenants on a single host before standing up a second). Per-user OAuth for Google. Twilio for SMS in/out with webhook signature verification. Web dashboard served from the same app.
+- **Platform/architecture direction:** Single Node/TypeScript service, multi-tenant data model (every persisted row carries a `tenant_id`; all queries scoped by it), single-tenant deployment for v1 (one VPS host, low-N installs per instance per Rick — max ~2–3 active tenants on a single host before standing up a second). Per-user OAuth for Google. Twilio for SMS in/out with webhook signature verification. Web dashboard served from the same app.
 - **Key technical constraints:**
   - SMS reminder timing requires sub-2-min trigger latency for the 5-min-before-event reminder. BullMQ or node-cron with a tight poll, not Zapier-style 15-min batch.
   - Twilio inbound webhook signature verification is non-negotiable (signed-URL path; can't be skipped on a public webhook).
@@ -81,7 +81,7 @@ A **standalone, managed, multi-tenant-architected assistant** that reads Matt's 
   - **Interruption gradient logic.** "Read the room — don't interrupt during a meeting" requires correlating calendar state, sender priority, and user-configured quiet hours. v1 uses rule-based heuristics (calendar busy + non-VIP sender = hold). Smarter ML version is post-v1.
   - **Recurring obligation tracking with reply-back loop.** "Studio rent due — reply DONE when paid" requires a per-task state machine, escalation rules, and inbound SMS routing back to the right task. Solvable but it's the highest-touch piece of the build.
   - **VIP inference from Gmail.** v1 derives VIP signal from a combination of explicit user-configured whitelist + simple heuristics (sender frequency, recency, "starred" thread, replies-to-domain). No ML; deterministic rules only.
-- **Technology preferences (settled):** Node + TypeScript, Express or Fastify, Firestore for data, BullMQ or node-cron for scheduling, Twilio SDK, Google APIs (Calendar + Gmail), OpenWeatherMap (or equivalent free tier) for weather. LLM provider for natural-language SMS parsing and draft generation: Claude (Anthropic API) — same provider Rick is already using elsewhere. Hosted on Rick's existing Coolify instance.
+- **Technology preferences (settled):** Node + TypeScript, Express or Fastify, Postgres (co-located on the VPS for v1), BullMQ or node-cron for scheduling, Twilio SDK, Google APIs (Calendar + Gmail), OpenWeatherMap (or equivalent free tier) for weather. LLM provider for natural-language SMS parsing and draft generation: Claude (Anthropic API). Deployment: pm2 + nginx + certbot on Rick's existing VPS (matches the PI stack).
 - **Evidence quality:** Settled — Tony Stark engineering review confirmed feasibility 2026-05-07; no Neurocore dependency per Rick 2026-05-08.
 
 ## 6. Scope and Boundaries
@@ -135,7 +135,7 @@ A **standalone, managed, multi-tenant-architected assistant** that reads Matt's 
 ### Hard Constraints
 
 - **Build owner: Rick via Claude Code.** No Barker orchestration, no human engineering team. Rick drives implementation directly using Claude Code as the build agent.
-- **Hosting:** Rick's existing Coolify instance. No new infrastructure budget for v1.
+- **Hosting:** Rick's existing VPS, deployed via pm2 + nginx + certbot (same stack as PI). Postgres co-located on the VPS for v1. No new infrastructure budget.
 - **Single-tenant deploy, max ~2–3 installs/instance.** Architecture is multi-tenant; deployment density is intentionally low.
 - **No Neurocore dependency.** Per Rick 2026-05-08. Assistant must own all its own state and personalization logic.
 - **Budget posture:** Custom tier pricing has not been finalized. Nami to lead. Pricing is not blocking the discovery-to-build pipeline; it blocks client communication.
@@ -177,7 +177,7 @@ A **standalone, managed, multi-tenant-architected assistant** that reads Matt's 
 | **D-8: White-label per-client managed service, not self-serve SaaS.** | Pricing language ("discussed individually", "monthly contracts") and the configuration-heavy nature of the product point to white-label. Self-serve signup is deferred indefinitely. | Nami, Rick | 2026-05-07 |
 | **D-9: No public marketing site, brand identity, or OG assets in scope.** | This is a B2B managed service — no consumer marketing surface in v1. Brand tokens / typography / OG images are explicitly N/A. | Lisa | 2026-05-07 |
 | **D-10: Repository — `Lezzur/matt_personalAssistant`.** | Confirmed via Lezzur GitHub org. Empty as of 2026-05-07; this brief is the first commit. | Rick | 2026-05-07 |
-| **D-11: Hosting — Rick's existing Coolify instance.** | Existing infrastructure. No new ops surface, no new cost. | Tony Stark | 2026-05-07 |
+| **D-11: Hosting — Rick's existing VPS via pm2 + nginx + certbot, Postgres co-located.** | Matches the PI stack (pm2 + nginx, not Coolify). Consistency with existing prod stack > introducing a second deployment paradigm. Coolify would only be worth it at 5+ heterogeneous services; not the case here. | Tony Stark (revised after Rick clarified PI uses pm2) | 2026-05-08 |
 | **D-12: PRD format — Agent-Optimized Spec.** | Same format as Neurocore PRD. Claude Code consumes this format directly. Pipeline runs Discovery → PRD (Agent-Optimized) → Tech Spec → Claude Code build (no Barker plan stage). | Light, pending Rick confirmation | 2026-05-08 |
 
 ## 9. Recommendation
